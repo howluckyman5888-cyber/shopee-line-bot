@@ -63,16 +63,36 @@ class ShopeeAffiliateClient:
             "Authorization": auth_header,
         }
 
-    def build_affiliate_link(self, clean_shopee_url: str, sub_id: str = "daily_bot") -> str:
+    @staticmethod
+    def shorten_url(long_url: str) -> str:
+        """將長長的分潤網址自動縮短為簡潔短網址 (is.gd / v.gd)，若失敗則回傳原網址"""
+        encoded = urllib.parse.quote(long_url, safe="")
+        for api_prefix in (
+            "https://is.gd/create.php?format=simple&url=",
+            "https://v.gd/create.php?format=simple&url=",
+        ):
+            try:
+                resp = requests.get(f"{api_prefix}{encoded}", timeout=5)
+                short = resp.text.strip()
+                if resp.status_code == 200 and short.startswith("https://"):
+                    return short
+            except Exception:
+                continue
+        return long_url
+
+    def build_affiliate_link(
+        self, clean_shopee_url: str, sub_id: str = "daily_bot", shorten: bool = True
+    ) -> str:
         """
-        根據蝦皮官方 Product Feed / 第三方短連結規範，將乾淨的蝦皮商品網址轉為專屬分潤連結：
-        https://s.shopee.tw/an_redir?origin_link={encoded_url}&affiliate_id={affiliate_id}&sub_id={sub_id}
+        根據蝦皮官方 Product Feed / 第三方短連結規範，將乾淨的蝦皮商品網址轉為專屬分潤連結，
+        並自動縮成簡潔短網址（如 https://tinyurl.com/xxxxx）
         """
         encoded_url = urllib.parse.quote(clean_shopee_url, safe="")
-        return (
+        long_aff_url = (
             f"https://s.shopee.tw/an_redir?origin_link={encoded_url}"
             f"&affiliate_id={self.affiliate_id}&sub_id={sub_id}"
         )
+        return self.shorten_url(long_aff_url) if shorten else long_aff_url
 
     def fetch_top_products(
         self,
@@ -222,12 +242,12 @@ class ShopeeAffiliateClient:
                 f"人氣 {kw}",
                 f"推薦 {kw}",
             ]
+            max_per_term = limit
         else:
-            # 全站綜合熱銷：涵蓋多個熱門品類，支援最多抓到 50 名
+            # 全站綜合熱銷：涵蓋多個熱門日常品類，支援最多抓到 50 名
             search_terms = [
-                "熱銷 冠軍",
                 "熱銷 行動電源 快充",
-                "熱銷 藍牙耳機",
+                "熱銷 藍牙耳機 降噪",
                 "熱銷 居家 收納",
                 "熱銷 零食 伴手禮",
                 "熱銷 保養 面膜",
@@ -236,10 +256,12 @@ class ShopeeAffiliateClient:
                 "熱銷 益生菌 保健",
                 "熱銷 咖啡 沖泡",
                 "熱銷 滑鼠 鍵盤",
-                "熱銷 吹風機 美容",
+                "熱銷 吹風機 負離子",
                 "熱銷 寵物 貓砂",
-                "熱銷 運動 水壺",
+                "熱銷 保溫杯 水壺",
             ]
+            # 每個分類平均抽取，確保排行榜多元豐富
+            max_per_term = max(2, (limit + 4) // 5)
 
         candidates: List[Dict[str, Any]] = []
         seen_titles = set()
@@ -258,10 +280,11 @@ class ShopeeAffiliateClient:
         for term in search_terms:
             if len(candidates) >= limit:
                 break
+            term_count = 0
             # 若單一關鍵字需要抓超過 15 筆，自動翻頁查詢
             pages_to_fetch = [1, 2, 3] if (keyword and keyword.strip() and limit > 15) else [1]
             for page_no in pages_to_fetch:
-                if len(candidates) >= limit:
+                if len(candidates) >= limit or term_count >= max_per_term:
                     break
                 encoded_q = urllib.parse.quote(term)
                 url = f"https://feebee.com.tw/all/{encoded_q}/?price=99-&page={page_no}"
@@ -273,7 +296,7 @@ class ShopeeAffiliateClient:
                     continue
 
                 for price_str, raw_title, rd_url, img_url, shop_html in item_pattern.findall(resp.text):
-                    if len(candidates) >= limit:
+                    if len(candidates) >= limit or term_count >= max_per_term:
                         break
 
                     shop_text = unescape(re.sub(r"<[^>]+>", "", shop_html).strip())
@@ -296,6 +319,7 @@ class ShopeeAffiliateClient:
 
                     seen_titles.add(title)
                     shop_counts[shop_text] = shop_counts.get(shop_text, 0) + 1
+                    term_count += 1
                     candidates.append(
                         {
                             "rank": len(candidates) + 1,

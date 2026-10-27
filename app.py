@@ -121,6 +121,24 @@ def line_webhook() -> Any:
         user_id = event.get("source", {}).get("userId", "")
         user_text = message.get("text", "")
 
+        # 若使用者直接貼上蝦皮商品網址，自動幫他轉換成專屬分潤短網址
+        url_match = re.search(
+            r"(https?://(?:[\w.-]*shopee\.tw|[\w.-]*shp\.ee)/[^\s]+)",
+            user_text,
+            flags=re.I,
+        )
+        if url_match:
+            raw_url = url_match.group(1)
+            clean_url = raw_url.split("?")[0]
+            short_aff = shopee_client.build_affiliate_link(clean_url, sub_id="line_custom")
+            reply_msg = (
+                "✅ 已為您轉換成專屬分潤短網址：\n"
+                f"👉 {short_aff}\n\n"
+                f"（已綁定推廣者編號：{shopee_client.affiliate_id}）"
+            )
+            line_notifier.reply_text(reply_token, reply_msg)
+            continue
+
         is_help, keyword, limit = parse_line_command(user_text)
         if is_help:
             line_notifier.reply_text(reply_token, HELP_MESSAGE)

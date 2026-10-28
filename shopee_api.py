@@ -235,30 +235,29 @@ class ShopeeAffiliateClient:
         }
 
         if keyword and keyword.strip():
-            kw = keyword.strip()
+            # 自動修正台灣常見同音字（例如「藍芽」->「藍牙」），且不強加「熱銷」二字以免抓到標題黨小賣家
+            kw = keyword.strip().replace("藍芽", "藍牙")
             search_terms = [
-                f"熱銷 {kw}",
                 kw,
-                f"人氣 {kw}",
-                f"推薦 {kw}",
+                f"{kw} 旗艦",
             ]
             max_per_term = limit
         else:
-            # 全站綜合熱銷：涵蓋多個熱門日常品類，支援最多抓到 50 名
+            # 全站綜合熱銷：鎖定各大品類知名規格詞，優先抓取蝦皮商城官方店商品
             search_terms = [
-                "熱銷 行動電源 快充",
-                "熱銷 藍牙耳機 降噪",
-                "熱銷 居家 收納",
-                "熱銷 零食 伴手禮",
-                "熱銷 保養 面膜",
-                "熱銷 氣炸鍋 家電",
-                "熱銷 衛生紙 日用品",
-                "熱銷 益生菌 保健",
-                "熱銷 咖啡 沖泡",
-                "熱銷 滑鼠 鍵盤",
-                "熱銷 吹風機 負離子",
-                "熱銷 寵物 貓砂",
-                "熱銷 保溫杯 水壺",
+                "行動電源 自帶線 快充",
+                "真無線 藍牙耳機 降噪",
+                "收納箱 整理箱 摺疊",
+                "堅果 零食 禮盒",
+                "保濕 面膜 精華液",
+                "氣炸鍋 烤箱",
+                "抽取式 衛生紙 箱購",
+                "益生菌 葉黃素",
+                "濾掛 咖啡 禮盒",
+                "無線滑鼠 機械鍵盤",
+                "負離子 吹風機",
+                "豆腐貓砂 寵物",
+                "316 保溫杯 隨行杯",
             ]
             # 每個分類平均抽取，確保排行榜多元豐富
             max_per_term = max(2, (limit + 4) // 5)
@@ -300,7 +299,8 @@ class ShopeeAffiliateClient:
                         break
 
                     shop_text = unescape(re.sub(r"<[^>]+>", "", shop_html).strip())
-                    if "蝦皮" not in shop_text:
+                    # 優先只挑選「蝦皮商城」官方大店與「蝦皮購物精選」高評價賣場，過濾一般無銷量小賣家
+                    if "蝦皮商城" not in shop_text and "蝦皮購物精選" not in shop_text:
                         continue
 
                     if shop_counts.get(shop_text, 0) >= max_per_shop:

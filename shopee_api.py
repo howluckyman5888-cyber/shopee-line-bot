@@ -119,9 +119,104 @@ class ShopeeAffiliateClient:
                     page=page,
                 )
             except Exception as exc:
-                print(f"ℹ️ Open API 無法使用 ({exc})，自動切換為「免 API 金鑰分潤模式」...")
+                print(f"ℹ️ Open API 無法使用 ({exc})，自動切換為「蝦皮分潤後台熱銷模式」...")
+
+        # 優先使用蝦皮分潤後台「商品推廣 - 熱銷商品」官方 API（含真實幾十萬銷量與真實分潤率）
+        if not (keyword and keyword.strip()):
+            try:
+                official_items = self._fetch_via_affiliate_web_api(limit=limit)
+                if official_items:
+                    return official_items
+            except Exception as exc:
+                print(f"ℹ️ 分潤後台直連逾時 ({exc})，切換為商城搜尋模式...")
 
         return self._fetch_via_public_ranking(keyword=keyword, limit=limit)
+
+    def _fetch_via_affiliate_web_api(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        直接從蝦皮分潤後台「商品推廣 -> 熱銷商品 (list_type=2)」撈取真實破萬銷量與真實分潤率商品
+        """
+        url = (
+            "https://affiliate.shopee.tw/api/v3/offer/product/list"
+            "?list_type=2&sort_type=1&page_offset=0&page_limit=20&client_type=1"
+        )
+        headers = {
+            "accept": "application/json, text/plain, */*",
+            "accept-language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "af-ac-enc-dat": "6a031d8daa0096e4",
+            "af-ac-enc-sz-token": "48xKaKgbhBzuCRsTsHVmmg==|uGeYnjb//o6mwdDyRL8IXU9M9AlF3urjn0eNk+Zva7DZ9WiKMZLHVZVf/UdNhcfkxsm0Ko0THXE=|6kiug8WpWDzX4Ms9|08|3",
+            "affiliate-program-type": "1",
+            "cookie": "_fbp=fb.1.1766652145719.198387003260954099; REC_T_ID=a6012748-e16d-11f0-a26e-9619fe650194; SPC_F=4uApGQ7a6YUBc8m5b6dHfa8emiPcBrLx; SPC_CLIENTID=NHVBcEdRN2E2WVVCngzzpsklgxekmbqd; SC_DFP=tylFZhilqigEhLihGjNaXrNYLpPdeMhV; _ga=GA1.1.1641669957.1766652150; SPC_EC=-; _gcl_gs=2.1.k1$i1788965803$u59024879; _gcl_aw=GCL.1788969108.Cj0KCQjwh4TVBhCWARIsAG0czmoKTbB5MoJ3UKZOsCFlL2wDtGE-WsyNIwsWvsvxadqPkp_zU_6qQ0AaAgDIEALw_wcB; _gcl_au=1.1.114454564.1790045639; _clck=1i5mwy9%5E2%5Egah%5E0%5E2485; SPC_ST=+J1qXfkFIYbaK1UtwT4GbgraA5+a7G5IpRmVujdoxtM6YYBEMScnwx4TBS1zRtsBi2KjCWntCwbjBAksEhQz1bkh52dh9MYYRljBVMa6nJJtBa/JjKOsHYgLwkIbm4RVt8g9vCVf7ED0lFZdIFXgAKwVYc60KtgQaABDdi7guI3K7JX0pFDlxaMO2qeqjICYHzBiu3nz8Gc8Y1S0L0tpVg==.AB/CRUKkB+B4T3x5B01JWPv2SG6agBLsQvgF3ZDtGI3M; SPC_U=40257853; SPC_R_T_ID=YnvVQhjow9ckMmnhu0mUtXEoJN96jfWnqWsaeyiMZF4kenZcz/Ry7+8+dDcTbp9GH6TyOarICcuqsQbHlXf+hscFeYQzct92hnLeqYSzQzpVcG4ByjmJQ46RvJhER8EMFY5TfwnX3vDugtckVt9SvFeGQlMpwpFgE9iAma5z5g8=; SPC_R_T_IV=UG9vdkVXQ0ZGMkFoaGJpag==; SPC_T_ID=YnvVQhjow9ckMmnhu0mUtXEoJN96jfWnqWsaeyiMZF4kenZcz/Ry7+8+dDcTbp9GH6TyOarICcuqsQbHlXf+hscFeYQzct92hnLeqYSzQzpVcG4ByjmJQ46RvJhER8EMFY5TfwnX3vDugtckVt9SvFeGQlMpwpFgE9iAma5z5g8=; SPC_T_IV=UG9vdkVXQ0ZGMkFoaGJpag==; _ga_NC4KT3JL2V=GS2.1.s1792590614$o1$g0$t1792590707$j60$l0$h0; SPC_SC_SESSION=gZhPtdYSMPSF9YYsBtcjdQNz592P1SqiOUSntiCSDJ1jlGV5wwY4EEsIS5OBfKHZ7yAmOdFO3SLHXRe3N/OORIPEoa8rmN2wvbKbkBuuWqkSmUOPAkIIkDTvzPqZqUP9gCFS+2Uy4TVK+jMxmMGmXdMwFfcG6SHynTKck1ZPCSHEfLPUMdECB6PpOSygO4MFL+xixIMLQ/WpVf1TBhomKD5N6gyjrGdr1wJyio05OAzX1p3vuh3yyv8CV97hSesOzPLVeVLamk9HMXIFMyUGedw==_1_40257853; SPC_SC_MAIN_SHOP_SA_UD=0; SPC_STK=G2RkVL4C7V7Thp4GqUlkjnRELsvDAH4fvL7r4NsJF2j87kUlAVSu8vK3cjvHSOLJLXBA216ZjgJYuUsN5DetoPv6KSWX8sRn+rJwOEbv2jE6+1l3UFld2k78eA42aWMA86CpX047pf264jz5kdy5JyVa0gYW8NDFPe2FuwJ4EJE+D1s4RWsaqToJtIZLAT0MRJK2G4+gD3agfIxlf2nY9v/N7dFNUPt8OEkCUCYoChAr78IsCcM/4TYAMbTRRRAhoRF5QihHIyk6kthyEMx2670wK4WNdf3nJShP5rCms/ObUkU+IvblPRVzf2ubFXZs4fAG9vQQQ1N2omswcP792dWg+5Z9CNT2D6NNwtszm7tu5ApCazNo25NKr1pTS4I87lZc6/G+qWYlarnMNG/bfeGdsaRtsmB71fqp5Mf9ptNckqo9ObNFQBK86kgC4BQoIwRW8FOrk4BibZqiC9ImO06mnDKe9o3veXLWOdHNjoHBD+0O+XdeVYpl5lnT0aoT; CTOKEN=kAWP6c1qEfG4yD7F%2BRDgWg%3D%3D; _med=refer; _QPWSDCXHZQA=dea252ad-0924-4a7b-a7c0-01e2c4ff10f6; REC7iLP4Q=9c02f519-2c5e-424e-98a4-9efe009198f2; _med=affiliates; csrftoken=69X641ZTE8npwbwA6O99rhJZVaPh0k0h; SPC_SI=la/EagAAAAB1bEZxRnhlVGHz6QIAAAAAZjJ3U1NkT3I=; SPC_CDS_CHAT=30a1354c-db5d-4fe9-bde7-f215fa21be04; _sapid=36f9c7ad5a4e1ec733a40baf15ab77478347855eb1660f0c3973b770; language=zh-Hant; language=zh-Hant; 40257853_hasShowedPaymentFillingTip=1; shopee_webUnique_ccd=7xU48Y3BbEmrE7s4iTuUbw%3D%3D%7Cye1J%2B%2FMUEMlOtH4%2Btjkwl3dxpj%2FvFUWfM3pCuY9f6FXK5gjGwJx1%2FpV5KGNNa1C739A5SQjkTp8%3D%7C412orwVD8hb9KcUP%7C08%7C3; ds=87fd70d85d72c3b3a915c2a5ac35182b; sense_sa_r=s; _ga_E4FV1WFT0L=GS2.1.s1793164617$o4$g1$t1793164631$j46$l0$h0; _ga_E1H7XE0312=GS2.1.s1793170942$o393$g0$t1793170942$j60$l0$h745541347",
+            "referer": "https://affiliate.shopee.tw/offer/product_offer",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+            "x-sap-ri": "d0a1e16aad70a802f853b533050118a457b32ce214b208be5b04",
+            "x-sap-sec": "SF9fP8Yy1+Y39cSFX+aFXcTFH+b0XKyFA9aLX01FJ+xPXByFZ+bMX2aFY+xIX00FD9aZXQaFP+b1X0SFh+aJXRkFxibVXcTFm+aRXdyFy+b+XMdF89atXdSFgkxiXN1FI+ahXM+FC+aMXcqFPiaeX09F4ixFXB1Fz+bdXK4F9+b8XQdFO9bNX+aF2+yFX+aFX+wmYRKQX+aF7+yQ0TZPXiaFX+aFumNmch2UXiaFj+iFX30z5goFX2ecf+yFX+aFDIdFX0a0X+ZQDy1AX+aFlurzY+aFX67AX+aJX9aFBOgFOiaFXRbUXkaFv+iFX+aFvIG755DrX+aFBdgyyx9PXkaFX+ZjugaDX+bZmiawbyHgWAYsX78hXiaFX+ZAdN1TX+ZUXkaFXL5qvvZztJrmtsrOX+xVDv7FX+Zl1y0rnKOT6KIgK7uY45LyDVJLZd9TSaq1Ln8iPQbEI0lf2FhGQ/CqlfuPV2L79XiKiEMu/oUVIFe53PYfi3trB+vBkn5x4eFVoc5AFEy5WYOV46WHpzfsSbWk2ELKwMvlz5PEG5lRMM4DNH2NDDN93vvGhkp6dLQzAh0YsLh/f4hWXoDJKihhh//TWDz3pmLcF5LAtVkouf0m0xjKa20b5FCisf0wSkEIRpi5UfcbROPJG+EMn16aXsoHNQCirWEaJX68su9XSgb9roLi5zABFoYNPFo0jHPVP4gUUSXlLGKE1on9RRFc8+aFXcMwNSJjdVDW9+aFXdg93lOpX+aFVSAI+6JG6F6LUH8PNJbfvKR+tKgVFZ9lbstfVKvJQ3DdabXWvheqjBEXvw8ZjMOEg1MgS/jeNDbgXIJv6WkgJTL69T38sDQGcEjzCmH1EEAl++dTtADMUCyaqOEwZHluRsIusFK1tWBsUCmtE9RDQ6w7HFWpGMx7lSkH5vYjFxkv9G0ty7rytTlVd6QiZBL5IvRp7wFj+bvnP56G3Pr6GLcGxfrzEsXEIRl7fA6NX+a8X+aFyrbB5+oFX+ZJVK+mCohqEETosi5sX+aFX+aFX+aFX+buX+aF5dPZbjBYMSn9g6N+DugD+oXUcF9YItZ2HQtszJIvRhMQtsrXCYPlevwWckA+Int5pDULglh7RLcQavHIGvZlhnwRN++DO1sS4PmaWDOjX+aFX+aFX+aFXNiFX+xcYU2iVbDF/t1oKRTQBqUp/FteXB1FX+Z4VCdtv0O8LZH4hzS75bn/S8lR9lKXknDRUe4qCbLxLxTQ3AdFX+aFU+aFX/y+3k9KP0Zo0QxSmDPbrGe5VZ4VCbsFKEaM/zHEP6nLLPlS8IDVd/IdVK0UCbLlL/y3h+oLP6D7X+aFX+7FX+ZSTUO0/tJIP9aFX+aFX+aFu+aFXRcRImXTTNraZTUWCOyU7ahZVgkspoPqdHHPQtTOvMDI8+aFX6YDI85wEvC18+aFXMz51l1MUM0+X+aFXK==",
+            "x-sz-sdk-version": "1.12.21",
+        }
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        js = resp.json()
+        raw_list = js.get("data", {}).get("list", []) or []
+        if not raw_list:
+            return []
+
+        def _convert_official_item(idx_and_item: Any) -> Dict[str, Any]:
+            idx, it = idx_and_item
+            rank = idx + 1
+            card = it.get("batch_item_for_item_card_full", {})
+            price_val = int(card.get("price", 0)) // 100000
+            sold = int(card.get("historical_sold") or card.get("global_sold") or 0)
+            comm_rate_str = (
+                it.get("default_commission_rate")
+                or it.get("seller_commission_rate")
+                or "5%"
+            )
+            try:
+                rate_num = float(comm_rate_str.replace("%", "").strip()) / 100.0
+            except ValueError:
+                rate_num = 0.05
+            est_comm = max(1, int(round(price_val * rate_num)))
+
+            product_link = (
+                it.get("product_link")
+                or f"https://shopee.tw/product/{card.get('shopid')}/{card.get('itemid')}"
+            )
+            offer_link = self.build_affiliate_link(product_link)
+            img_hash = card.get("image", "")
+            image_url = (
+                f"https://cf.shopee.tw/file/{img_hash}"
+                if img_hash and not img_hash.startswith("http")
+                else img_hash
+            )
+            rating_val = card.get("item_rating", {}).get("rating_star", 4.9)
+
+            node = {
+                "itemId": str(it.get("item_id") or card.get("itemid") or rank),
+                "productName": card.get("name", "蝦皮熱銷商品"),
+                "productLink": product_link,
+                "offerLink": offer_link,
+                "imageUrl": image_url,
+                "price": str(price_val),
+                "sales": sold,
+                "ratingStar": f"{float(rating_val):.1f}",
+                "shopName": card.get("shop_name") or "蝦皮官方熱銷賣場",
+                "commissionRate": comm_rate_str,
+                "commission": str(est_comm),
+            }
+            return self._normalize_product(node, rank=rank)
+
+        selected = list(enumerate(raw_list[:limit]))
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(_convert_official_item, selected))
+
+        # 若使用者要求超過 20 筆 (例如 30~50 筆)，不足的部分自動由商城熱門商品補齊
+        if len(results) < limit:
+            extra = self._fetch_via_public_ranking(keyword="", limit=limit - len(results))
+            for item in extra:
+                item["rank"] = len(results) + 1
+                results.append(item)
+
+        return results
 
     def _fetch_via_graphql(
         self,
@@ -235,8 +330,14 @@ class ShopeeAffiliateClient:
         }
 
         if keyword and keyword.strip():
-            # 自動修正台灣常見同音字（例如「藍芽」->「藍牙」），且不強加「熱銷」二字以免抓到標題黨小賣家
+            # 自動修正台灣常見同音字，並針對過於廣泛的單詞補強品類詞
             kw = keyword.strip().replace("藍芽", "藍牙")
+            if kw == "居家":
+                kw = "居家 收納 日用"
+            elif kw == "3C" or kw == "3c":
+                kw = "快充 行動電源 藍牙耳機"
+            elif kw in {"美妝", "保養"}:
+                kw = "保濕 面膜 精華液"
             search_terms = [
                 kw,
                 f"{kw} 旗艦",
@@ -299,8 +400,8 @@ class ShopeeAffiliateClient:
                         break
 
                     shop_text = unescape(re.sub(r"<[^>]+>", "", shop_html).strip())
-                    # 優先只挑選「蝦皮商城」官方大店與「蝦皮購物精選」高評價賣場，過濾一般無銷量小賣家
-                    if "蝦皮商城" not in shop_text and "蝦皮購物精選" not in shop_text:
+                    # 嚴格只挑選「蝦皮商城」官方品牌旗艦店，全面封殺「蝦皮購物精選」（比價網付費置頂廣告，常為0銷量小賣家）
+                    if "蝦皮商城" not in shop_text:
                         continue
 
                     if shop_counts.get(shop_text, 0) >= max_per_shop:
